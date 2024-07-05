@@ -1,9 +1,9 @@
 import streamlit as st
 import requests
 from sqlalchemy import create_engine, inspect, text, select
+from sqlalchemy.orm import sessionmaker
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sqlalchemy.orm import sessionmaker
 from db_manager import Base, Case, engine  # engine을 import
 import re
 import logging
@@ -205,22 +205,17 @@ def show_main_page():
         st.write("시작하려면 '바로 시작' 버튼을 클릭하세요.")
 
 def show_search_page():
-    st.title("법률 판례 검색")
+    st.title("판례 검색")
 
-    st.sidebar.title("법률 분야 선택")
-    legal_fields = ['민사', '가사', '형사A(생활형)', '형사B(일반형)', '행정', '기업', '근로자', '특허/저작권', '금융조세', '개인정보/ict', '잘모르겠습니다']
-    selected_fields = st.sidebar.multiselect("법률 분야를 선택하세요:", legal_fields)
+    selected_fields = st.multiselect("관심 있는 법률 분야를 선택하세요:", ["민사", "형사", "가사", "행정", "헌법", "기타", "잘모르겠습니다"])
 
-    st.header("상황 설명")
-    st.write("아래 가이드라인을 참고하여 귀하의 법률 상황을 자세히 설명해주세요.")
-
-    st.subheader("작성 가이드라인")
     st.markdown("""
-    1. 사건의 발생 시기와 장소를 명시해주세요.
-    2. 관련된 사람들의 관계를 설명해주세요. (예: 고용주-직원, 판매자-구매자)
-    3. 사건의 경과를 시간 순서대로 설명해주세요.
-    4. 문제가 되는 행위나 상황을 구체적으로 설명해주세요.
-    5. 현재 상황과 귀하가 알고 싶은 법률적 문제를 명확히 해주세요.
+    #### 검색 예시:
+    1. 사건의 개요를 간략히 작성하세요.
+    2. 가능한 한 구체적으로 작성하는 것이 좋습니다.
+    3. 날짜, 장소, 관련 인물 등을 포함하세요.
+    4. 법률 용어를 포함하면 더 정확한 검색이 가능합니다.
+    5. 상황과 귀하가 알고 싶은 법률적 문제를 명확히 해주세요.
     6. 분야를 제한하면 더욱 빠르게 검색할 수 있고, 더 정확한 정보가 나옵니다.
     """)
 
@@ -272,6 +267,9 @@ def show_result_page():
         similarities = cosine_similarity(user_vector, filtered_tfidf_matrix)
         most_similar_idx = similarities.argmax()
         case = filtered_cases[most_similar_idx]
+
+    st.subheader("사건 번호")
+    st.write(case.caseNo)
 
     st.subheader("요약")
     st.markdown(highlight_legal_terms(case.summary), unsafe_allow_html=True)
