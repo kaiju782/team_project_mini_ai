@@ -25,7 +25,11 @@ CACHE_FILE = "legal_terms_cache.json"
 DB_FILE = "legal_cases.db"
 
 # 데이터베이스 엔진 정의
-engine = create_engine(f'sqlite:///{DB_FILE}')
+try:
+    engine = create_engine(f'sqlite:///{DB_FILE}')
+    Base.metadata.bind = engine
+except Exception as e:
+    st.error(f"데이터베이스 연결 오류: {str(e)}")
 
 @st.cache_data
 def get_legal_terms() -> dict:
@@ -138,7 +142,7 @@ def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any
         
         if not exists:
             logging.info("데이터베이스 다운로드 시작")
-            st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
+            st.warning("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
             if not download_db():
                 raise Exception("데이터베이스 다운로드 실패")
 
@@ -158,6 +162,7 @@ def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any
             raise Exception(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
     except Exception as e:
         logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
+        st.error(f"데이터 준비 중 오류 발생: {str(e)}")
         return None, None, None
 
 def local_css():
@@ -203,12 +208,8 @@ def show_main_page():
     st.title("AI 기반 맞춤형 판례 검색 서비스")
     st.write("당신의 상황에 가장 적합한 판례를 찾아드립니다")
 
-    st.image("static/photo.png", width=200)
-
     if st.button("바로 시작"):
         st.session_state.page = "search"
-    else:
-        st.write("시작하려면 '바로 시작' 버튼을 클릭하세요.")
 
 def show_search_page():
     st.title("법률 판례 검색")
@@ -289,9 +290,34 @@ def show_result_page():
         st.subheader("핵심 질문")
         st.markdown(highlight_legal_terms(case.jdgmnQuestion), unsafe_allow_html=True)
     
-    if case.jdgmnAnswer:
+if case.jdgmnAnswer:
         st.subheader("답변")
         st.markdown(highlight_legal_terms(case.jdgmnAnswer), unsafe_allow_html=True)
 
-    if st.button("다시 검색하기"):
+if st.button("다시 검색하기"):
         st.session_state.page = "search"
+
+def main():
+    st.write("디버그: 메인 함수 시작")
+    local_css()
+
+    if 'page' not in st.session_state:
+        st.session_state.page = "main"
+
+    st.write(f"디버그: 현재 페이지 - {st.session_state.page}")
+
+    if st.session_state.page == "main":
+        show_main_page()
+    elif st.session_state.page == "search":
+        show_search_page()
+    elif st.session_state.page == "result":
+        show_result_page()
+
+    st.write("디버그: 메인 함수 종료")
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        st.error(f"오류 발생: {str(e)}")
+        logging.exception("Unexpected error occurred")
