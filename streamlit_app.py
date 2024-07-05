@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 API_KEY = "D/spYGY15giVS64SLvtShZlNHxAbr9eDi1uU1Ca1wrqCiU+0YMwcnFy53naflVlg5wemikAYwiugNoIepbpexQ=="
 API_URL = "https://api.odcloud.kr/api/15069932/v1/uddi:3799441a-4012-4caa-9955-b4d20697b555"
 CACHE_FILE = "legal_terms_cache.json"
-DB_FILE = "legal_cases.db"
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "legal_cases.db")
 
 # 데이터베이스 엔진 정의
 engine = create_engine(f'sqlite:///{DB_FILE}')
@@ -64,8 +64,12 @@ def get_legal_terms() -> dict:
 def download_db():
     file_id = "1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
     output = DB_FILE
-    gdown.download(id=file_id, output=output, quiet=False)
-    logging.info(f"데이터베이스 다운로드 완료: {output}")
+    try:
+        gdown.download(id=file_id, output=output, quiet=False)
+        logging.info(f"데이터베이스 다운로드 완료: {output}")
+    except Exception as e:
+        logging.error(f"데이터베이스 다운로드 실패: {str(e)}")
+        st.error("데이터베이스 다운로드에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.")
 
 def check_db(session):
     inspector = inspect(engine)
@@ -74,14 +78,12 @@ def check_db(session):
             logging.info("데이터베이스 파일이 없습니다. 다운로드를 시작합니다.")
             download_db()
         
-        for table_name in inspector.get_table_names():
-            stmt = select(text('1')).select_from(text(table_name)).limit(1)
-            result = session.execute(stmt)
-            if result.first():
-                return True
-        logging.warning("데이터베이스에 테이블이 없습니다. 다운로드를 다시 시도합니다.")
-        download_db()
-        return False
+        if not inspector.has_table('cases'):
+            logging.warning("cases 테이블이 없습니다. 데이터베이스를 다시 다운로드합니다.")
+            download_db()
+            return False
+        
+        return True
     except Exception as e:
         logging.error(f"데이터베이스 확인 중 오류 발생: {str(e)}")
         return False
@@ -123,36 +125,29 @@ def get_file_size(file_path: str) -> str:
         return "File not found"
 
 @st.cache_resource
-def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any], Optional[List[Case]]]:
+def get_vectorizer_and_matrix():
     try:
-        inspector = inspect(engine)
-        exists = inspector.has_table('cases')
-        logging.info(f"'cases' 테이블 존재 여부: {exists}")
+        DBSession = sessionmaker(bind=engine)
+        session = DBSession()
         
-        if not exists:
-            logging.info("데이터베이스 다운로드 시작")
-            st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
-            download_db()
-
-        file_size = get_file_size(DB_FILE)
-        logging.info(f"데이터베이스 파일 크기: {file_size}")
-
-        exists = inspector.has_table('cases')
-        if exists:
-            logging.info(f"테이블이 존재합니다. 데이터 로드 시작.")
-            cases = load_cases()
-            if not cases:
-                logging.error("케이스 데이터가 비어 있습니다.")
-                return None, None, None
-            vectorizer = TfidfVectorizer()
-            tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
-            return vectorizer, tfidf_matrix, cases
-        else:
-            logging.error(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
+        if not check_db(session):
+            st.error("데이터베이스를 불러오는 데 실패했습니다. 다시 시도해주세요.")
             return None, None, None
+
+        cases = load_cases()
+        if not cases:
+            st.error("케이스 데이터가 비어 있습니다.")
+            return None, None, None
+
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
+        return vectorizer, tfidf_matrix, cases
     except Exception as e:
         logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
+        st.error(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
         return None, None, None
+    finally:
+        session.close()
 
 def local_css():
     st.markdown("""
