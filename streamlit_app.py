@@ -11,6 +11,7 @@ import json
 import os
 from typing import List, Tuple, Optional
 import gdown
+from PIL import Image
 
 # Streamlit 설정
 st.set_page_config(page_title="AI 기반 맞춤형 판례 검색 서비스", layout="wide")
@@ -31,10 +32,13 @@ def local_css():
     <style>
     body {
         font-family: Arial, sans-serif;
-        line-height: 1.6;
-        color: #333;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
     }
-    .stButton>button {
+    .stButton > button {
         background-color: #000;
         color: #fff;
         padding: 0.75rem 2rem;
@@ -43,8 +47,16 @@ def local_css():
         border-radius: 5px;
         cursor: pointer;
     }
-    .stTextInput>div>div>input {
+    .stTextInput > div > div > input {
         background-color: #f0f0f0;
+    }
+    h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+    p {
+        font-size: 1.2rem;
+        margin-bottom: 2rem;
     }
     .legal-term {
         font-weight: bold;
@@ -213,11 +225,15 @@ def show_main_page():
     st.title("AI 기반 맞춤형 판례 검색 서비스")
     st.write("당신의 상황에 가장 적합한 판례를 찾아드립니다")
 
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.image("https://raw.githubusercontent.com/your_username/your_repo/main/static/photo.png", width=200)
+    # 로고 이미지 표시
+    logo_path = os.path.join(os.path.dirname(__file__), "photo.png")
+    if os.path.exists(logo_path):
+        logo = Image.open(logo_path)
+        st.image(logo, width=200)
+    else:
+        st.warning("로고 이미지를 찾을 수 없습니다.")
 
-    if st.button("바로 시작"):
+    if st.button("바로 시작", key="start_button"):
         st.session_state.page = "search"
 
 def show_search_page():
@@ -251,7 +267,7 @@ def show_search_page():
 
     user_input = st.text_area("상황 설명:", height=200)
 
-    if st.button("검색"):
+    if st.button("검색", key="search_button"):
         if user_input and len(user_input) > 3:
             st.session_state.user_input = user_input
             st.session_state.selected_fields = selected_fields
@@ -289,7 +305,7 @@ def show_result_page():
         most_similar_idx = similarities.argmax()
         case = filtered_cases[most_similar_idx]
 
-    if case:
+if case:
         st.subheader("사건 번호")
         st.write(case.caseNo)
 
@@ -304,7 +320,7 @@ def show_result_page():
     else:
         st.warning("해당하는 판례를 찾을 수 없습니다.")
 
-    if st.button("다시 검색하기"):
+    if st.button("다시 검색하기", key="search_again_button"):
         st.session_state.page = "search"
 
 def main():
