@@ -285,7 +285,7 @@ def show_result_page():
     st.subheader("요약")
     st.markdown(highlight_legal_terms(case.summary), unsafe_allow_html=True)
     
-if case.jdgmnQuestion:
+    if case.jdgmnQuestion:
         st.subheader("핵심 질문")
         st.markdown(highlight_legal_terms(case.jdgmnQuestion), unsafe_allow_html=True)
     
@@ -295,19 +295,3 @@ if case.jdgmnQuestion:
 
     if st.button("다시 검색하기"):
         st.session_state.page = "search"
-
-def main():
-    local_css()
-
-    if 'page' not in st.session_state:
-        st.session_state.page = "main"
-
-    if st.session_state.page == "main":
-        show_main_page()
-    elif st.session_state.page == "search":
-        show_search_page()
-    elif st.session_state.page == "result":
-        show_result_page()
-
-if __name__ == '__main__':
-    main()
