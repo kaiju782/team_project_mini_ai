@@ -116,28 +116,35 @@ file_path = "legal_cases.db"  # 여기에 실제 파일 경로를 입력하세�
 
 @st.cache_resource
 def get_vectorizer_and_matrix() -> Tuple[TfidfVectorizer, any, List[Case]]:
-    inspector = inspect(engine)
-    exists = inspector.has_table('cases')
-    print(exists, '존재?')
-    
-    if exists == False :
-        logging.info("데이터베이스 다운로드 시작")
-        st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
-        download_db()
+    try:
+        inspector = inspect(engine)
+        exists = inspector.has_table('cases')
+        logging.info(f"'cases' 테이블 존재 여부: {exists}")
+        
+        if not exists:
+            logging.info("데이터베이스 다운로드 시작")
+            st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
+            download_db()
 
-    exists = inspector.has_table('cases')
-    file_size = get_file_size(file_path)
-    print(f"File size: {file_size}")
-    if exists :
-        print(f'테이블이 존재하는지 여부 {exists}다운로드 끝')
-        cases = load_cases()
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
-        return vectorizer, tfidf_matrix, cases
-    else : 
-        st.write('DB에 여전히 데이터가 존재하지 않습니다. ', get_file_size(file_path))
-        file_size = get_file_size(file_path)
-        print(f"File size: {file_size}")
+        file_size = get_file_size(DB_FILE)
+        logging.info(f"데이터베이스 파일 크기: {file_size}")
+
+        exists = inspector.has_table('cases')
+        if exists:
+            logging.info(f"테이블이 존재합니다. 데이터 로드 시작.")
+            cases = load_cases()
+            if not cases:
+                logging.error("케이스 데이터가 비어 있습니다.")
+                return None, None, None
+            vectorizer = TfidfVectorizer()
+            tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
+            return vectorizer, tfidf_matrix, cases
+        else:
+            logging.error(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
+            return None, None, None
+    except Exception as e:
+        logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
+        return None, None, None
 def local_css():
     st.markdown("""
     <style>
