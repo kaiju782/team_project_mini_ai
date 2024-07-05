@@ -1,0 +1,1 @@
+pip install Flask Requests scikit_learn soynlp SQLAlchemy gdowns
