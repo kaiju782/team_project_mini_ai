@@ -1,15 +1,15 @@
 import streamlit as st
 import requests
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from db_manager import Base, Case  # engine을 import
+from sqlalchemy.orm import sessionmaker
+from db_manager import Base, Case, engine  # engine을 import
 import re
 import logging
 import json
 import os
-from typing import List
+from typing import List, Tuple, Optional
 import gdown
 
 # Streamlit 설정
@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 API_KEY = "D/spYGY15giVS64SLvtShZlNHxAbr9eDi1uU1Ca1wrqCiU+0YMwcnFy53naflVlg5wemikAYwiugNoIepbpexQ=="
 API_URL = "https://api.odcloud.kr/api/15069932/v1/uddi:3799441a-4012-4caa-9955-b4d20697b555"
 CACHE_FILE = "legal_terms_cache.json"
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "legal_cases.db")
+DB_FILE = "legal_cases.db"
 
 # 데이터베이스 엔진 정의
 engine = create_engine(f'sqlite:///{DB_FILE}')
@@ -64,12 +64,8 @@ def get_legal_terms() -> dict:
 def download_db():
     file_id = "1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
     output = DB_FILE
-    try:
-        gdown.download(id=file_id, output=output, quiet=False)
-        logging.info(f"데이터베이스 다운로드 완료: {output}")
-    except Exception as e:
-        logging.error(f"데이터베이스 다운로드 실패: {str(e)}")
-        st.error("데이터베이스 다운로드에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.")
+    gdown.download(id=file_id, output=output, quiet=False)
+    logging.info(f"데이터베이스 다운로드 완료: {output}")
 
 def check_db(session):
     inspector = inspect(engine)
@@ -78,12 +74,14 @@ def check_db(session):
             logging.info("데이터베이스 파일이 없습니다. 다운로드를 시작합니다.")
             download_db()
         
-        if not inspector.has_table('cases'):
-            logging.warning("cases 테이블이 없습니다. 데이터베이스를 다시 다운로드합니다.")
-            download_db()
-            return False
-        
-        return True
+        for table_name in inspector.get_table_names():
+            stmt = select(text('1')).select_from(text(table_name)).limit(1)
+            result = session.execute(stmt)
+            if result.first():
+                return True
+        logging.warning("데이터베이스에 테이블이 없습니다. 다운로드를 다시 시도합니다.")
+        download_db()
+        return False
     except Exception as e:
         logging.error(f"데이터베이스 확인 중 오류 발생: {str(e)}")
         return False
@@ -125,29 +123,36 @@ def get_file_size(file_path: str) -> str:
         return "File not found"
 
 @st.cache_resource
-def get_vectorizer_and_matrix():
+def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any], Optional[List[Case]]]:
     try:
-        DBSession = sessionmaker(bind=engine)
-        session = DBSession()
+        inspector = inspect(engine)
+        exists = inspector.has_table('cases')
+        logging.info(f"'cases' 테이블 존재 여부: {exists}")
         
-        if not check_db(session):
-            st.error("데이터베이스를 불러오는 데 실패했습니다. 다시 시도해주세요.")
-            return None, None, None
+        if not exists:
+            logging.info("데이터베이스 다운로드 시작")
+            st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
+            download_db()
 
-        cases = load_cases()
-        if not cases:
-            st.error("케이스 데이터가 비어 있습니다.")
-            return None, None, None
+        file_size = get_file_size(DB_FILE)
+        logging.info(f"데이터베이스 파일 크기: {file_size}")
 
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
-        return vectorizer, tfidf_matrix, cases
+        exists = inspector.has_table('cases')
+        if exists:
+            logging.info(f"테이블이 존재합니다. 데이터 로드 시작.")
+            cases = load_cases()
+            if not cases:
+                logging.error("케이스 데이터가 비어 있습니다.")
+                return None, None, None
+            vectorizer = TfidfVectorizer()
+            tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
+            return vectorizer, tfidf_matrix, cases
+        else:
+            logging.error(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
+            return None, None, None
     except Exception as e:
         logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
-        st.error(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
         return None, None, None
-    finally:
-        session.close()
 
 def local_css():
     st.markdown("""
@@ -200,17 +205,22 @@ def show_main_page():
         st.write("시작하려면 '바로 시작' 버튼을 클릭하세요.")
 
 def show_search_page():
-    st.title("판례 검색")
+    st.title("법률 판례 검색")
 
-    selected_fields = st.multiselect("관심 있는 법률 분야를 선택하세요:", ["민사", "형사", "가사", "행정", "헌법", "기타", "잘모르겠습니다"])
+    st.sidebar.title("법률 분야 선택")
+    legal_fields = ['민사', '가사', '형사A(생활형)', '형사B(일반형)', '행정', '기업', '근로자', '특허/저작권', '금융조세', '개인정보/ict', '잘모르겠습니다']
+    selected_fields = st.sidebar.multiselect("법률 분야를 선택하세요:", legal_fields)
 
+    st.header("상황 설명")
+    st.write("아래 가이드라인을 참고하여 귀하의 법률 상황을 자세히 설명해주세요.")
+
+    st.subheader("작성 가이드라인")
     st.markdown("""
-    #### 검색 예시:
-    1. 사건의 개요를 간략히 작성하세요.
-    2. 가능한 한 구체적으로 작성하는 것이 좋습니다.
-    3. 날짜, 장소, 관련 인물 등을 포함하세요.
-    4. 법률 용어를 포함하면 더 정확한 검색이 가능합니다.
-    5. 상황과 귀하가 알고 싶은 법률적 문제를 명확히 해주세요.
+    1. 사건의 발생 시기와 장소를 명시해주세요.
+    2. 관련된 사람들의 관계를 설명해주세요. (예: 고용주-직원, 판매자-구매자)
+    3. 사건의 경과를 시간 순서대로 설명해주세요.
+    4. 문제가 되는 행위나 상황을 구체적으로 설명해주세요.
+    5. 현재 상황과 귀하가 알고 싶은 법률적 문제를 명확히 해주세요.
     6. 분야를 제한하면 더욱 빠르게 검색할 수 있고, 더 정확한 정보가 나옵니다.
     """)
 
@@ -262,9 +272,6 @@ def show_result_page():
         similarities = cosine_similarity(user_vector, filtered_tfidf_matrix)
         most_similar_idx = similarities.argmax()
         case = filtered_cases[most_similar_idx]
-
-    st.subheader("사건 번호")
-    st.write(case.caseNo)
 
     st.subheader("요약")
     st.markdown(highlight_legal_terms(case.summary), unsafe_allow_html=True)
