@@ -1,15 +1,15 @@
 import streamlit as st
 import requests
-from sqlalchemy import create_engine, inspect, text, select
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from db_manager import Base, Case, engine  # engine을 import
+from db_manager import Base, Case  # engine을 import
 import re
 import logging
 import json
 import os
-from typing import List, Tuple, Optional
+from typing import List
 import gdown
 
 # Streamlit 설정
