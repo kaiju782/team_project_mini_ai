@@ -275,6 +275,7 @@ def show_result_page():
         
     st.subheader("사건 번호")
     st.write(case.caseNo)
+    
     st.subheader("요약")
     st.markdown(highlight_legal_terms(case.summary), unsafe_allow_html=True)
     
