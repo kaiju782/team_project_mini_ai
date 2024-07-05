@@ -305,7 +305,7 @@ def show_result_page():
         most_similar_idx = similarities.argmax()
         case = filtered_cases[most_similar_idx]
 
-if case:
+    if case:
         st.subheader("사건 번호")
         st.write(case.caseNo)
 
