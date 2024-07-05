@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import sessionmaker
-from db_manager import Base, Case, engine  # engine을 import
+from db_manager import Base, Case, engine
 import re
 import logging
 import json
@@ -64,15 +64,21 @@ def get_legal_terms() -> dict:
 def download_db():
     file_id = "1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
     output = DB_FILE
-    gdown.download(id=file_id, output=output, quiet=False)
-    logging.info(f"데이터베이스 다운로드 완료: {output}")
+    try:
+        gdown.download(id=file_id, output=output, quiet=False)
+        logging.info(f"데이터베이스 다운로드 완료: {output}")
+        return True
+    except Exception as e:
+        logging.error(f"데이터베이스 다운로드 실패: {str(e)}")
+        return False
 
 def check_db(session):
     inspector = inspect(engine)
     try:
         if not os.path.exists(DB_FILE):
             logging.info("데이터베이스 파일이 없습니다. 다운로드를 시작합니다.")
-            download_db()
+            if not download_db():
+                return False
         
         for table_name in inspector.get_table_names():
             stmt = select(text('1')).select_from(text(table_name)).limit(1)
@@ -80,8 +86,7 @@ def check_db(session):
             if result.first():
                 return True
         logging.warning("데이터베이스에 테이블이 없습니다. 다운로드를 다시 시도합니다.")
-        download_db()
-        return False
+        return download_db()
     except Exception as e:
         logging.error(f"데이터베이스 확인 중 오류 발생: {str(e)}")
         return False
@@ -96,7 +101,9 @@ def load_cases() -> List[Case]:
 
     logging.info("데이터베이스에서 판례 데이터 로딩 시작")
     try:
-        check_db(session)  # 데이터베이스 확인 및 다운로드
+        if not check_db(session):
+            raise Exception("데이터베이스 검증 실패")
+        
         total_cases = session.query(Case).count()
         logging.info(f"총 {total_cases}개의 판례가 데이터베이스에 있습니다.")
         
@@ -132,7 +139,8 @@ def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any
         if not exists:
             logging.info("데이터베이스 다운로드 시작")
             st.write("잠시만 기다려 주세요. DB를 다운로드 하고 있습니다.")
-            download_db()
+            if not download_db():
+                raise Exception("데이터베이스 다운로드 실패")
 
         file_size = get_file_size(DB_FILE)
         logging.info(f"데이터베이스 파일 크기: {file_size}")
@@ -142,14 +150,12 @@ def get_vectorizer_and_matrix() -> Tuple[Optional[TfidfVectorizer], Optional[any
             logging.info(f"테이블이 존재합니다. 데이터 로드 시작.")
             cases = load_cases()
             if not cases:
-                logging.error("케이스 데이터가 비어 있습니다.")
-                return None, None, None
+                raise Exception("케이스 데이터가 비어 있습니다.")
             vectorizer = TfidfVectorizer()
             tfidf_matrix = vectorizer.fit_transform([case.summary for case in cases if case.summary])
             return vectorizer, tfidf_matrix, cases
         else:
-            logging.error(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
-            return None, None, None
+            raise Exception(f"DB에 여전히 데이터가 존재하지 않습니다. 파일 크기: {file_size}")
     except Exception as e:
         logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
         return None, None, None
@@ -273,10 +279,13 @@ def show_result_page():
         most_similar_idx = similarities.argmax()
         case = filtered_cases[most_similar_idx]
 
+    st.subheader("사건 번호")
+    st.write(case.caseNo)
+
     st.subheader("요약")
     st.markdown(highlight_legal_terms(case.summary), unsafe_allow_html=True)
     
-    if case.jdgmnQuestion:
+if case.jdgmnQuestion:
         st.subheader("핵심 질문")
         st.markdown(highlight_legal_terms(case.jdgmnQuestion), unsafe_allow_html=True)
     
