@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import sessionmaker
-from db_manager import Base, Case, engine
+from db_manager import Base, Case, engine  # engine을 import
 import re
 import logging
 import json
@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 API_KEY = "D/spYGY15giVS64SLvtShZlNHxAbr9eDi1uU1Ca1wrqCiU+0YMwcnFy53naflVlg5wemikAYwiugNoIepbpexQ=="
 API_URL = "https://api.odcloud.kr/api/15069932/v1/uddi:3799441a-4012-4caa-9955-b4d20697b555"
 CACHE_FILE = "legal_terms_cache.json"
-DB_FILE = os.path.join(os.path.dirname(__file__), "legal_cases.db")
+DB_FILE = "legal_cases.db"
 
-# 데이터베이스 엔진 재정의
+# 데이터베이스 엔진 정의
 engine = create_engine(f'sqlite:///{DB_FILE}')
 
 @st.cache_data
@@ -163,12 +163,24 @@ def local_css():
         color: #333;
     }
     .legal-term {
+        font-weight: bold;
         color: #007bff;
         cursor: help;
+        position: relative;
     }
-    .tooltip-inner {
-        max-width: 300px;
-        text-align: left;
+    .legal-term:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #333;
+        color: #fff;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 14px;
+        white-space: nowrap;
+        z-index: 1;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -177,7 +189,7 @@ def highlight_legal_terms(text: str) -> str:
     terms = get_legal_terms()
     for term, explanation in terms.items():
         pattern = r'\b' + re.escape(term) + r'\b'
-        replacement = f'<span class="legal-term" title="{explanation}">{term}</span>'
+        replacement = f'<span class="legal-term" data-tooltip="{explanation}">{term}</span>'
         text = re.sub(pattern, replacement, text)
     return text
 
