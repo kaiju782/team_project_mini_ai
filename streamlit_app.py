@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import sessionmaker
-from db_manager import Base, Case
+from db_manager import Base, Case, engine  # engine을 import
 import re
 import logging
 import json
