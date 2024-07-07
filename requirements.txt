@@ -4,3 +4,4 @@ scikit_learn==1.5.1
 soynlp==0.0.493
 SQLAlchemy==2.0.31
 gdown==5.2.0
+streamlit==1.36.0
