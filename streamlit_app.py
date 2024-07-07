@@ -22,13 +22,13 @@ API_KEY = "D/spYGY15giVS64SLvtShZlNHxAbr9eDi1uU1Ca1wrqCiU+0YMwcnFy53naflVlg5wemi
 API_URL = "https://api.odcloud.kr/api/15069932/v1/uddi:3799441a-4012-4caa-9955-b4d20697b555"
 
 # 법률 용어 사전
-CACHE_FILE =  os.path.join(os.path.dirname(__file__), "legal_cases.db")
+DB_FILE =  os.path.join(os.path.dirname(__file__), "legal_cases.db")
 
 @st.cache_data
 def get_legal_terms() -> dict:
-    if os.path.exists(CACHE_FILE):
+    if os.path.exists(DB_FILE):
         logging.info("저장된 용어 사전 불러오기")
-        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
             legal_terms_dict = json.load(f)
         logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 캐시에서 불러왔습니다.")
     else:
@@ -46,7 +46,7 @@ def get_legal_terms() -> dict:
                 legal_terms_dict = {item['용어명']: item['설명'] for item in data['data']}
                 logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 가져왔습니다.")
                 
-                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                with open(DB_FILE, 'w', encoding='utf-8') as f:
                     json.dump(legal_terms_dict, f, ensure_ascii=False, indent=2)
                 logging.info("법률 용어 데이터를 캐시 파일에 저장했습니다.")
             else:
