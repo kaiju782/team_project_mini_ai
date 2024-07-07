@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import sessionmaker
-from db_manager import Base, Case, engine
+from db_manager import Base, Case
 import re
 import logging
 import json
@@ -27,75 +27,40 @@ DB_URL = "https://drive.google.com/uc?id=1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
 
 # 데이터베이스 엔진 정의
 engine = create_engine(f'sqlite:///{DB_FILE}')
-
-@st.cache_data
-def get_legal_terms() -> dict:
-    if os.path.exists(CACHE_FILE):
-        logging.info("저장된 용어 사전 불러오기")
-        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-            legal_terms_dict = json.load(f)
-        logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 캐시에서 불러왔습니다.")
-    else:
-        logging.info("API에서 법률 용어 데이터 가져오기 시작")
-        params = {
-            "serviceKey": API_KEY,
-            "page": 1,
-            "perPage": 1000
-        }
-        response = requests.get(API_URL, params=params)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if 'data' in data:
-                legal_terms_dict = {item['용어명']: item['설명'] for item in data['data']}
-                logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 가져왔습니다.")
-                
-                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(legal_terms_dict, f, ensure_ascii=False, indent=2)
-                logging.info("법률 용어 데이터를 캐시 파일에 저장했습니다.")
-            else:
-                logging.error("API 응답에 'data' 키가 없습니다.")
-                legal_terms_dict = {}
-        else:
-            logging.error(f"API 요청 실패: 상태 코드 {response.status_code}")
-            legal_terms_dict = {}
-    
-    return legal_terms_dict
+Session = sessionmaker(bind=engine)
 
 def download_db():
     try:
         gdown.download(DB_URL, DB_FILE, quiet=False)
         logging.info(f"데이터베이스 다운로드 완료: {DB_FILE}")
+        # 데이터베이스 다운로드 후 엔진 재생성
+        global engine
+        engine = create_engine(f'sqlite:///{DB_FILE}')
+        Base.metadata.create_all(engine)
     except Exception as e:
         logging.error(f"데이터베이스 다운로드 실패: {str(e)}")
         st.error("데이터베이스 다운로드에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.")
 
-def check_db(session):
+def check_db():
+    if not os.path.exists(DB_FILE):
+        logging.info("데이터베이스 파일이 없습니다. 다운로드를 시작합니다.")
+        download_db()
+    
     inspector = inspect(engine)
-    try:
-        if not os.path.exists(DB_FILE):
-            logging.info("데이터베이스 파일이 없습니다. 다운로드를 시작합니다.")
-            download_db()
-        
-        if not inspector.has_table('cases'):
-            logging.warning("cases 테이블이 없습니다. 데이터베이스를 다시 다운로드합니다.")
-            download_db()
-            return False
-        
-        return True
-    except Exception as e:
-        logging.error(f"데이터베이스 확인 중 오류 발생: {str(e)}")
+    if not inspector.has_table('cases'):
+        logging.warning("cases 테이블이 없습니다. 데이터베이스를 다시 다운로드합니다.")
+        download_db()
         return False
+    
+    return True
 
 @st.cache_resource
 def load_cases() -> List[Case]:
-    Base.metadata.bind = engine
-    DBSession = sessionmaker(bind=engine)
-    session = DBSession()
+    check_db()
+    session = Session()
 
     logging.info("데이터베이스에서 판례 데이터 로딩 시작")
     try:
-        check_db(session)  # 데이터베이스 확인 및 다운로드
         total_cases = session.query(Case).count()
         logging.info(f"총 {total_cases}개의 판례가 데이터베이스에 있습니다.")
         
@@ -110,27 +75,9 @@ def load_cases() -> List[Case]:
     finally:
         session.close()
 
-def get_file_size(file_path: str) -> str:
-    if os.path.exists(file_path):
-        size_in_bytes = os.path.getsize(file_path)
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_in_bytes < 1024.0:
-                break
-            size_in_bytes /= 1024.0
-        return f"{size_in_bytes:.2f} {unit}"
-    else:
-        return "File not found"
-
 @st.cache_resource
 def get_vectorizer_and_matrix():
     try:
-        DBSession = sessionmaker(bind=engine)
-        session = DBSession()
-        
-        if not check_db(session):
-            st.error("데이터베이스를 불러오는 데 실패했습니다. 다시 시도해주세요.")
-            return None, None, None
-
         cases = load_cases()
         if not cases:
             st.error("케이스 데이터가 비어 있습니다.")
@@ -143,8 +90,6 @@ def get_vectorizer_and_matrix():
         logging.error(f"get_vectorizer_and_matrix 함수에서 오류 발생: {str(e)}")
         st.error(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
         return None, None, None
-    finally:
-        session.close()
 
 def local_css():
     st.markdown("""
