@@ -29,6 +29,40 @@ DB_URL = "https://drive.google.com/uc?id=1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
 engine = create_engine(f'sqlite:///{DB_FILE}')
 Session = sessionmaker(bind=engine)
 
+@st.cache_data
+def get_legal_terms() -> dict:
+    if os.path.exists(CACHE_FILE):
+        logging.info("저장된 용어 사전 불러오기")
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            legal_terms_dict = json.load(f)
+        logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 캐시에서 불러왔습니다.")
+    else:
+        logging.info("API에서 법률 용어 데이터 가져오기 시작")
+        params = {
+            "serviceKey": API_KEY,
+            "page": 1,
+            "perPage": 1000
+        }
+        response = requests.get(API_URL, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'data' in data:
+                legal_terms_dict = {item['용어명']: item['설명'] for item in data['data']}
+                logging.info(f"{len(legal_terms_dict)}개의 법률 용어를 가져왔습니다.")
+                
+                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(legal_terms_dict, f, ensure_ascii=False, indent=2)
+                logging.info("법률 용어 데이터를 캐시 파일에 저장했습니다.")
+            else:
+                logging.error("API 응답에 'data' 키가 없습니다.")
+                legal_terms_dict = {}
+        else:
+            logging.error(f"API 요청 실패: 상태 코드 {response.status_code}")
+            legal_terms_dict = {}
+    
+    return legal_terms_dict
+
 def download_db():
     try:
         gdown.download(DB_URL, DB_FILE, quiet=False)
