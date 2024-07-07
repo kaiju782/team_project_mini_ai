@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, inspect, text, select
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import sessionmaker
-from db_manager import Base, Case, engine  # engine을 import
+from db_manager import Base, Case, engine
 import re
 import logging
 import json
@@ -22,7 +22,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 API_KEY = "D/spYGY15giVS64SLvtShZlNHxAbr9eDi1uU1Ca1wrqCiU+0YMwcnFy53naflVlg5wemikAYwiugNoIepbpexQ=="
 API_URL = "https://api.odcloud.kr/api/15069932/v1/uddi:3799441a-4012-4caa-9955-b4d20697b555"
 CACHE_FILE = "legal_terms_cache.json"
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "legal_cases.db")
+DB_FILE = "legal_cases.db"
+DB_URL = "https://drive.google.com/uc?id=1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
 
 # 데이터베이스 엔진 정의
 engine = create_engine(f'sqlite:///{DB_FILE}')
@@ -62,11 +63,9 @@ def get_legal_terms() -> dict:
     return legal_terms_dict
 
 def download_db():
-    file_id = "1rBTbbtBE5K5VgiuTvt3JgneuJ8odqCJm"
-    output = DB_FILE
     try:
-        gdown.download(id=file_id, output=output, quiet=False)
-        logging.info(f"데이터베이스 다운로드 완료: {output}")
+        gdown.download(DB_URL, DB_FILE, quiet=False)
+        logging.info(f"데이터베이스 다운로드 완료: {DB_FILE}")
     except Exception as e:
         logging.error(f"데이터베이스 다운로드 실패: {str(e)}")
         st.error("데이터베이스 다운로드에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.")
